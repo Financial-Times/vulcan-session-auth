@@ -42,8 +42,8 @@ type AuthHandler struct {
 // This function will be called each time the request hits the location with this middleware activated
 func (a *AuthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	//Check session
-	session, err := store.Get(r, a.cfg.Username)
-	if err != nil || session == nil {
+	session, _ := store.Get(r, "session")
+	if session.Values["active"] != "true" {
 		//No session - try to log in
 		auth, err := utils.ParseAuthHeader(r.Header.Get("Authorization"))
 		// Reject the request by writing forbidden response
@@ -55,11 +55,6 @@ func (a *AuthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		session.Values["active"] = "true"
 		// Save all sessions.
 		sessions.Save(r, w)
-	} else if session.Values["active"] != "true" {
-		//validate session
-		w.WriteHeader(http.StatusForbidden)
-		io.WriteString(w, "Forbidden")
-		return
 	}
 	// Pass the request to the next middleware in chain
 	a.next.ServeHTTP(w, r)
