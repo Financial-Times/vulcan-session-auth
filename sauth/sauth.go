@@ -5,7 +5,6 @@ package sauth
 import (
 	"fmt"
 	"github.com/gorilla/sessions"
-	"io"
 	"net/http"
 
 	"github.com/mailgun/vulcand/Godeps/_workspace/src/github.com/codegangsta/cli"
@@ -48,8 +47,8 @@ func (a *AuthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		auth, err := utils.ParseAuthHeader(r.Header.Get("Authorization"))
 		// Reject the request by writing forbidden response
 		if err != nil || a.cfg.Username != auth.Username || a.cfg.Password != auth.Password {
-			w.WriteHeader(http.StatusForbidden)
-			io.WriteString(w, "Forbidden")
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Header().Set("WWW-Authenticate", "Basic realm=\"Please log in\"")
 			return
 		}
 		session.Values["active"] = "true"
