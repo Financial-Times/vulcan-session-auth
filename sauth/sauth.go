@@ -3,6 +3,7 @@ package sauth
 // Note that I import the versions bundled with vulcand. That will make our lives easier, as we'll use exactly the same versions used
 // by vulcand. We are escaping dependency management troubles thanks to Godep.
 import (
+	"crypto/rand"
 	"fmt"
 	"github.com/gorilla/sessions"
 	"net/http"
@@ -14,7 +15,17 @@ import (
 
 const Type = "sauth"
 
-var store = sessions.NewCookieStore([]byte("something-very-secret"))
+var store = newStore()
+
+func newStore() *sessions.CookieStore {
+	storeSeed, err := rand.Prime(rand.Reader, 128)
+	if err != nil {
+		fmt.Errorf("Could not initialise CookieStore: %v\n", err)
+	}
+	store := sessions.NewCookieStore([]byte(storeSeed.String()))
+	store.MaxAge(86400) // 1 day
+	return store
+}
 
 func GetSpec() *plugin.MiddlewareSpec {
 	return &plugin.MiddlewareSpec{
