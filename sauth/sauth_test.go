@@ -5,10 +5,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 
-	"github.com/mailgun/vulcand/Godeps/_workspace/src/github.com/codegangsta/cli"
-	"github.com/mailgun/vulcand/Godeps/_workspace/src/github.com/mailgun/oxy/testutils"
-	. "github.com/mailgun/vulcand/Godeps/_workspace/src/gopkg.in/check.v1"
 	"github.com/mailgun/vulcand/plugin"
+	"github.com/mailgun/vulcand/vendor/github.com/codegangsta/cli"
+	"github.com/vulcand/oxy/testutils"
+	. "gopkg.in/check.v1"
 
 	"testing"
 )
@@ -27,7 +27,8 @@ func (s *AuthSuite) TestSpecIsOK(c *C) {
 }
 
 func (s *AuthSuite) TestNew(c *C) {
-	cl, err := New("user", "pass")
+	cl, err := New("user,pass")
+
 	c.Assert(cl, NotNil)
 	c.Assert(err, IsNil)
 
@@ -40,16 +41,16 @@ func (s *AuthSuite) TestNew(c *C) {
 
 func (s *AuthSuite) TestNewBadParams(c *C) {
 	// Empty pass
-	_, err := New("user", "")
+	_, err := New("user,")
 	c.Assert(err, NotNil)
 
 	// Empty user
-	_, err = New("", "pass")
+	_, err = New(",pass")
 	c.Assert(err, NotNil)
 }
 
 func (s *AuthSuite) TestFromOther(c *C) {
-	a, err := New("user", "pass")
+	a, err := New("user,pass")
 	c.Assert(a, NotNil)
 	c.Assert(err, IsNil)
 
@@ -69,16 +70,16 @@ func (s *AuthSuite) TestAuthFromCli(c *C) {
 		c.Assert(err, IsNil)
 
 		a := out.(*AuthMiddleware)
-		c.Assert(a.Password, Equals, "pass1")
-		c.Assert(a.Username, Equals, "user1")
+		c.Assert(a.authKeys[0].password, Equals, "pass1")
+		c.Assert(a.authKeys[0].username, Equals, "user1")
 	}
 	app.Flags = CliFlags()
-	app.Run([]string{"test", "--user=user1", "--pass=pass1"})
+	app.Run([]string{"test", "--credentials=user1,pass1"})
 	c.Assert(executed, Equals, true)
 }
 
 func (s *AuthSuite) TestRequestSuccess(c *C) {
-	a := &AuthMiddleware{Username: "aladdin", Password: "open sesame"}
+	a := &AuthMiddleware{authKeys: []authKey{{username: "aladdin", password: "open sesame"}}}
 
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, "treasure")
@@ -90,13 +91,13 @@ func (s *AuthSuite) TestRequestSuccess(c *C) {
 	srv := httptest.NewServer(auth)
 	defer srv.Close()
 
-	_, body, err := testutils.Get(srv.URL, testutils.BasicAuth(a.Username, a.Password))
+	_, body, err := testutils.Get(srv.URL, testutils.BasicAuth(a.authKeys[0].username, a.authKeys[0].password))
 	c.Assert(err, IsNil)
 	c.Assert(string(body), Equals, "treasure")
 }
 
 func (s *AuthSuite) TestRequestBadPassword(c *C) {
-	a := &AuthMiddleware{Username: "aladdin", Password: "open sesame"}
+	a := &AuthMiddleware{authKeys: []authKey{{username: "aladdin", password: "open sesame"}}}
 
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, "treasure")
@@ -109,7 +110,7 @@ func (s *AuthSuite) TestRequestBadPassword(c *C) {
 	defer srv.Close()
 
 	// bad pass
-	re, _, err := testutils.Get(srv.URL, testutils.BasicAuth(a.Username, "open please"))
+	re, _, err := testutils.Get(srv.URL, testutils.BasicAuth(a.authKeys[0].username, "open please"))
 	c.Assert(err, IsNil)
 	c.Assert(re.StatusCode, Equals, http.StatusUnauthorized)
 
