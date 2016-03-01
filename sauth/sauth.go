@@ -5,11 +5,13 @@ package sauth
 import (
 	"crypto/rand"
 	"fmt"
-	"github.com/gorilla/sessions"
+	"log"
 	"net/http"
+	"strings"
+
+	"github.com/gorilla/sessions"
 
 	"github.com/mailgun/vulcand/Godeps/_workspace/src/github.com/codegangsta/cli"
-	"github.com/mailgun/vulcand/Godeps/_workspace/src/github.com/mailgun/oxy/utils"
 	"github.com/mailgun/vulcand/plugin"
 )
 
@@ -30,7 +32,7 @@ func newStore() *sessions.CookieStore {
 func GetSpec() *plugin.MiddlewareSpec {
 	return &plugin.MiddlewareSpec{
 		Type:      Type,       // A short name for the middleware
-		FromOther: FromOther,  // Tells vulcand how to rcreate middleware from another one (this is for deserialization)
+		FromOther: FromOther,  // Tells vulcand how to recreate middleware from another one (this is for deserialization)
 		FromCli:   FromCli,    // Tells vulcand how to create middleware from command line tool
 		CliFlags:  CliFlags(), // Vulcand will add this flags to middleware specific command line tool
 	}
@@ -39,8 +41,14 @@ func GetSpec() *plugin.MiddlewareSpec {
 // AuthMiiddleware struct holds configuration parameters and is used to
 // serialize/deserialize the configuration from storage engines.
 type AuthMiddleware struct {
-	Password string
-	Username string
+	// e.g: "foo:bar,user:pass"
+	Credentials string
+	authKeys    []authKey
+}
+
+type authKey struct {
+	username string
+	password string
 }
 
 // Auth middleware handler
@@ -55,9 +63,9 @@ func (a *AuthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	session, _ := store.Get(r, "session")
 	if session.Values["active"] != "true" {
 		//No session - try to log in
-		auth, err := utils.ParseAuthHeader(r.Header.Get("Authorization"))
+		username, password, ok := r.BasicAuth()
 		// Reject the request by writing forbidden response
-		if err != nil || a.cfg.Username != auth.Username || a.cfg.Password != auth.Password {
+		if !ok || !isAuthorized(a.cfg, username, password) {
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Header().Set("WWW-Authenticate", "Basic realm=\"Please log in\"")
 			return
@@ -71,11 +79,21 @@ func (a *AuthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // This function is optional but handy, used to check input parameters when creating new middlewares
-func New(user, pass string) (*AuthMiddleware, error) {
-	if user == "" || pass == "" {
-		return nil, fmt.Errorf("Username and password can not be empty")
+func New(credentials string) (*AuthMiddleware, error) {
+	var authKeys []authKey
+	for _, entry := range strings.Split(credentials, ",") {
+		key := strings.Split(entry, ":")
+		if !isValid(key) {
+			log.Printf("WARN  - Ignoring entry: [%v]", entry)
+			continue
+		}
+		authKeys = append(authKeys, authKey{username: key[0], password: key[1]})
 	}
-	return &AuthMiddleware{Username: user, Password: pass}, nil
+	if len(authKeys) == 0 {
+		return nil, fmt.Errorf("No valid credential was provided")
+	}
+
+	return &AuthMiddleware{Credentials: credentials, authKeys: authKeys}, nil
 }
 
 // This function is important, it's called by vulcand to create a new handler from the middleware config and put it into the
@@ -86,7 +104,27 @@ func (c *AuthMiddleware) NewHandler(next http.Handler) (http.Handler, error) {
 
 // String() will be called by loggers inside Vulcand and command line tool.
 func (c *AuthMiddleware) String() string {
-	return fmt.Sprintf("username=%v, pass=%v", c.Username, "********")
+	var desc string
+	for _, key := range c.authKeys {
+		desc = desc + fmt.Sprintf("username=%v, pass=%v\n", key.username, "********")
+	}
+	return desc
+}
+
+func isAuthorized(c AuthMiddleware, username, password string) bool {
+	for _, c := range c.authKeys {
+		if c.username == username && c.password == password {
+			return true
+		}
+	}
+	return false
+}
+
+func isValid(key []string) bool {
+	if len(key) != 2 || key[0] == "" || key[1] == "" {
+		return false
+	}
+	return true
 }
 
 // FromOther Will be called by Vulcand when engine or API will read the middleware from the serialized format.
@@ -95,18 +133,17 @@ func (c *AuthMiddleware) String() string {
 // The first and the only parameter should be the struct itself, no pointers and other variables.
 // Function should return middleware interface and error in case if the parameters are wrong.
 func FromOther(c AuthMiddleware) (plugin.Middleware, error) {
-	return New(c.Username, c.Password)
+	return New(c.Credentials)
 }
 
 // FromCli constructs the middleware from the command line
 func FromCli(c *cli.Context) (plugin.Middleware, error) {
-	return New(c.String("user"), c.String("pass"))
+	return New(c.String("credentials"))
 }
 
 // CliFlags will be used by Vulcand construct help and CLI command for the vctl command
 func CliFlags() []cli.Flag {
 	return []cli.Flag{
-		cli.StringFlag{"user, u", "", "Basic auth username", ""},
-		cli.StringFlag{"pass, p", "", "Basic auth pass", ""},
+		cli.StringFlag{"credentials, c", "", `Comma separated list of auth key pairs, e.g. "user:pass,foo:bar"`, ""},
 	}
 }
