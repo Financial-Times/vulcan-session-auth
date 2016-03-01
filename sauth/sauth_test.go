@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 
+	"github.com/mailgun/vulcand/Godeps/_workspace/src/github.com/codegangsta/cli"
 	"github.com/mailgun/vulcand/plugin"
-	"github.com/mailgun/vulcand/vendor/github.com/codegangsta/cli"
 	"github.com/vulcand/oxy/testutils"
 	. "gopkg.in/check.v1"
 

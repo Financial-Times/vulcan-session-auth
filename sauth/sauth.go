@@ -11,8 +11,8 @@ import (
 
 	"github.com/gorilla/sessions"
 
+	"github.com/mailgun/vulcand/Godeps/_workspace/src/github.com/codegangsta/cli"
 	"github.com/mailgun/vulcand/plugin"
-	"github.com/mailgun/vulcand/vendor/github.com/codegangsta/cli"
 )
 
 const Type = "sauth"
