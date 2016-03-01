@@ -27,7 +27,7 @@ func (s *AuthSuite) TestSpecIsOK(c *C) {
 }
 
 func (s *AuthSuite) TestNew(c *C) {
-	cl, err := New("user,pass")
+	cl, err := New("user:pass")
 
 	c.Assert(cl, NotNil)
 	c.Assert(err, IsNil)
@@ -50,7 +50,7 @@ func (s *AuthSuite) TestNewBadParams(c *C) {
 }
 
 func (s *AuthSuite) TestFromOther(c *C) {
-	a, err := New("user,pass")
+	a, err := New("user:pass")
 	c.Assert(a, NotNil)
 	c.Assert(err, IsNil)
 
@@ -74,12 +74,12 @@ func (s *AuthSuite) TestAuthFromCli(c *C) {
 		c.Assert(a.authKeys[0].username, Equals, "user1")
 	}
 	app.Flags = CliFlags()
-	app.Run([]string{"test", "--credentials=user1,pass1"})
+	app.Run([]string{"test", "--credentials=user1:pass1"})
 	c.Assert(executed, Equals, true)
 }
 
 func (s *AuthSuite) TestRequestSuccess(c *C) {
-	a := &AuthMiddleware{authKeys: []authKey{{username: "aladdin", password: "open sesame"}}}
+	a := &AuthMiddleware{authKeys: []authKey{{username: "aladdin", password: "open sesame"}, {username: "genie", password: "itty bitty living space"}}}
 
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, "treasure")
@@ -92,6 +92,10 @@ func (s *AuthSuite) TestRequestSuccess(c *C) {
 	defer srv.Close()
 
 	_, body, err := testutils.Get(srv.URL, testutils.BasicAuth(a.authKeys[0].username, a.authKeys[0].password))
+	c.Assert(err, IsNil)
+	c.Assert(string(body), Equals, "treasure")
+
+	_, body, err = testutils.Get(srv.URL, testutils.BasicAuth(a.authKeys[1].username, a.authKeys[1].password))
 	c.Assert(err, IsNil)
 	c.Assert(string(body), Equals, "treasure")
 }

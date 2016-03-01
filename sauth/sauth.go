@@ -41,11 +41,7 @@ func GetSpec() *plugin.MiddlewareSpec {
 // AuthMiiddleware struct holds configuration parameters and is used to
 // serialize/deserialize the configuration from storage engines.
 type AuthMiddleware struct {
-	// CSV formatted string
-	// e.g:
-	// "foo,bar
-	// username,password
-	// us3r,p@ssw0rd1"
+	// e.g: "foo:bar,user:pass"
 	Credentials string
 	authKeys    []authKey
 }
@@ -85,9 +81,9 @@ func (a *AuthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // This function is optional but handy, used to check input parameters when creating new middlewares
 func New(credentials string) (*AuthMiddleware, error) {
 	var authKeys []authKey
-	for _, entry := range strings.Split(credentials, "\n") {
-		key := strings.Split(entry, ",")
-		if len(key) != 2 || key[0] == "" || key[1] == "" {
+	for _, entry := range strings.Split(credentials, ",") {
+		key := strings.Split(entry, ":")
+		if !isValid(key) {
 			log.Printf("WARN  - Ignoring entry: [%v]", entry)
 			continue
 		}
@@ -124,6 +120,13 @@ func isAuthorized(c AuthMiddleware, username, password string) bool {
 	return false
 }
 
+func isValid(key []string) bool {
+	if len(key) != 2 || key[0] == "" || key[1] == "" {
+		return false
+	}
+	return true
+}
+
 // FromOther Will be called by Vulcand when engine or API will read the middleware from the serialized format.
 // It's important that the signature of the function will be exactly the same, otherwise Vulcand will
 // fail to register this middleware.
@@ -141,6 +144,6 @@ func FromCli(c *cli.Context) (plugin.Middleware, error) {
 // CliFlags will be used by Vulcand construct help and CLI command for the vctl command
 func CliFlags() []cli.Flag {
 	return []cli.Flag{
-		cli.StringFlag{"credentials, c", "", `List of auth key pairs in CSV format, e.g. "foo,bar\nusername,password\nus3r,p@ssw0rd1`, ""},
+		cli.StringFlag{"credentials, c", "", `Comma separated list of auth key pairs, e.g. "user:pass,foo:bar"`, ""},
 	}
 }
